@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title> Market Arbitrage Tool</title>
+<!--
+
+
+TODO: Blackout markets with <n vehicles only
+
+
+-->
+
+<style>
+    /*Map outline settings*/
+    .dma {
+        /*fill: #6666FF;*/
+        fill: #cccccc;
+        stroke: #000;
+        stroke-width: 1px;
+    }
+    /*Tooltip settings*/
+    .d3-tip {
+        line-height: 1;
+        padding: 12px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #fff;
+        border-radius: 2px;
+    }
+    /* Table formatting */
+    th { text-align: left;
+        background-color: #1d6397;
+        font-size: 20px;}
+
+    th, td { padding: 5px 10px 5px 5px;
+        border-bottom: 1px solid #ddd;
+        min-width: 140px;
+    }
+    td {
+
+    }
+    th.center, td.center { text-align: center; }
+    th.num, td.num { text-align: right; }
+    tr:hover {background-color: #88c8f7}
+
+    #tabledetails {
+        /*display: block;*/
+        height: 264px;
+        overflow:scroll;
+        /*width: 1080;*/
+    }
+
+    #toolbars {
+        float: right;
+        font-size: 20px;
+        font-weight: bold;
+        margin-bottom: 30px;
+
+        /* Top Right Bottom Left*/
+    }
+    #source_dma {display:block; font-size: 18px;}
+    #make_select {display:block; font-size: 18px; width: 135px;}
+    #model_select {display:block; font-size: 18px; width: 175px;}
+    #year_select {display:block; font-size: 16px; width: 60px; height: 186.1875px;}
+    button {font-size: 20px; display:block;}
+    /*svg {float:left;}*/
+
+    #contain-all {width:1460px;}
+    #titlebar {display: flex; align-items: center; display: -webkit-flex; -webkit-align-items: center;}
+
+
+</style>
+<div id="titlebar">
+    <!--<img src="DRIVIN_Logo_Horiz_RGB_01.svg" height="100" width="350">-->
+    <font size=8> Market Arbitrage Tool</font>
+</div>
+<br>
+<div id="contain-all">
+    <div id="toolbars">
+        Market Area
+        <select id="source_dma">
+            <option> </option> </select>
+        Vehicle Make
+        <select onchange = "genModels()" id="make_select">
+            <option>  </option></select>
+        Vehicle Model
+        <select onchange = "getYears()" id="model_select">
+            <option>  </option></select>
+        Vehicle Year
+        <select multiple id="year_select">
+            <option>  </option></select>
+
+        <button onclick = "getData()"  type="button"> Generate</button>
+
+        <img src="Scale.svg" width="470.6px" height="106.6px" display="block">
+    </div>
+
+    <!--D3 scripts loading-->
+    <script src="http://d3js.org/d3.v3.min.js"></script>
+    <script src="http://d3js.org/queue.v1.min.js"></script>
+    <script src="http://d3js.org/topojson.v1.min.js"></script>
+    <script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
+    <script src="https://rawgit.com/gka/d3-jetpack/master/d3-jetpack.js"></script>
+
+    <script>
+
+
+        d3.json("dmadist.json", function(data) {
+            dma = data
+            genSourceDMA()
+        })
+        var width = 960,
+                height = 500;
+
+        var path = d3.geo.path();
+
+        var svg = d3.select("body").append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+        // Hover-over tool tip
+        var tip = d3.tip()
+                .attr('class', 'd3-tip')
+                //            .offset([10, 0])
+                .html(function(id) {
+                    try{
+                        return (
+                                "DMA Name: " + dma['byID'][id]['Name'] + "<br>" +
+                                "Mean: $" + Math.round(summaries[id].Mean) + "<br>" +
+                                "Median: $" + Math.round(summaries[id].Median) + "<br>" +
+                                "Margin: $" + Math.round(summaries[id].Margin) + "<br>" +
+                                "Avg Mileage: " + Math.round(summaries[id].Med_Mileage) + "<br>" +
+                                "Adj Margin: $" + Math.round(summaries[id].Adj_Margin) + "<br>" +
+                                "Count: " + summaries[id].Count
+                        )
+                    }
+                    catch(err) {
+                        return "DMA Name: " + dma['byID'][id]['Name']
+                    }
+
+                })
+        svg.call(tip);
+
+        var dispatch = d3.dispatch("load", "statechange");
+
+        // Live Stuff, Don't Touch
+        queue()
+                .defer(d3.json, "dma2.json")
+                .await(ready);
+
+        function ready(error, us) {
+            svg.append("g")
+                    .selectAll("path")
+                    .data(topojson.feature(us, us.objects.nielsen_dma).features)
+                    .enter().append("path")
+                    .attr("class", "dma")
+                    .attr("id", function(d){return "d" + d.id;})
+                    //                .attr("id", us)
+
+                    //                Mouse Over
+                    .on("mouseover", function (d) {
+                        d3.select(this).attr("r", 10).style("opacity", "0.5")
+                        tip.show(d.id)
+                    })
+
+                    //                Mouse Over and Out
+                    .on("mouseout", function (d) {
+                        d3.select(this).attr("r", 5.5).style("opacity", "1.0")
+                        tip.hide(d.id)
+                    })
+
+                    //              On Click
+                    .on('click', function (d) {
+                        id = d.id
+                        addDetails(id);
+                    })
+
+                    .attr("d", d3.geo.path());
+            // Create the actual table
+            columns = [
+                { head: 'Dealer Name', cl: 'title', html: ƒ('dealer_nm') },
+                { head: 'City, State', cl: 'center', html: ƒ('city_state') },
+                { head: 'Dealer Phone', cl: 'center', html: ƒ('dealer_phone') },
+                { head: 'VIN', cl: 'center', html: ƒ('vin') },
+                { head: 'List Price', cl: 'num', html: ƒ('price', d3.format('$,')) },
+                { head: 'Mileage', cl: 'num', html: ƒ('mileage', d3.format(','))},
+                { head: 'Transit Cost', cl: 'num', html: ƒ('transit', d3.format('$,')) },
+                { head: 'Margin', cl: 'num', html: ƒ('margin', d3.format('$,')) }
+            ];
+
+            table = d3.select('body')
+            table.append('thead').append('tr')
+                    .selectAll('th')
+                    .data(columns).enter()
+                    .append('th')
+                    .attr('class', ƒ('cl'))
+                    .text(ƒ('head'));
+
+        }
+
+        //This is now all me, so this is when it turns to shit.
+        function genMakes(){
+            var makes; // I can't figure out making this dynamic... someone else's problem.
+            makes = ['Acura', 'Aston Martin', 'Audi', 'Bentley', 'BMW', 'Buick', 'Cadillac', 'Chevrolet',
+                'Chrysler', 'Dodge', 'Ferrari', 'FIAT', 'Ford', 'GMC', 'Honda', 'Hummer', 'Hyundai',
+                'Infiniti', 'Isuzu', 'Jaguar', 'Jeep', 'Kia', 'Lamborghini', 'Land Rover', 'Lexus', 'Lincoln',
+                'Maserati', 'Mazda', 'Mercedes-Benz', 'Mercury', 'MINI', 'Mitsubishi', 'Nissan', 'Oldsmobile',
+                'Pontiac', 'Porsche', 'RAM', 'Rolls-Royce', 'Saab', 'Saturn', 'Scion', 'smart',
+                'Smart', 'Subaru', 'Suzuki', 'Tesla', 'Toyota', 'Volkswagen', 'Volvo',];
+
+            for (i = 0; i < makes.length; i++){
+                var x = document.getElementById("make_select")
+                option = document.createElement("option")
+                option.text = makes[i]
+                x.add(option)
+            }
+        }
+
+        function genModels(){
+            var x = document.getElementById("model_select")
+            while(x.length>1){
+                x.remove(x.length-1)
+            }
+            md = {}
+            models = []
+            filename= "cars/" + selection("make_select") +".csv"
+            d3.csv(filename, function(data) {
+                for (i=0; i<data.length; i++){
+                    x = data[i].model
+                    md[x] = 1
+                }
+                models = Object.keys(md)
+                models.sort()
+                for (i = 0; i < models.length; i++) {
+                    var x = document.getElementById("model_select")
+                    option = document.createElement("option")
+                    option.text = models[i]
+                    x.add(option)
+                }
+            })
+
+        }
+
+        function selection(name){
+            e = document.getElementById(name)
+            return(e.options[e.selectedIndex].text)
+        }
+
+        function multiselection(name){
+            options = []
+            e = document.getElementById(name)
+            for (var i=0; i< e.selectedOptions.length; i++){
+                options.push(e.selectedOptions[i].value);
+            }
+            return(options)
+        }
+
+        function genSourceDMA(){
+            dmalist = Object.keys(dma['byName'])
+            dmalist.sort()
+            for (i = 0; i < dmalist.length; i++) {
+                var x = document.getElementById("source_dma")
+                option = document.createElement("option")
+                option.text = dmalist[i]
+                x.add(option)
+            }
+        }
+
+        function getYears(){
+            var x = document.getElementById("year_select")
+            while(x.length>1){
+                x.remove(x.length-1)
+            }
+            yd = {}
+            years = []
+            filename= "cars/" + selection("make_select") +".csv"
+            d3.csv(filename, function(data) {
+                for (i=0; i<data.length; i++){
+                    if (data[i].model == selection("model_select")){
+                        x = Number(data[i].year)
+                        yd[x] = 1
+                    }
+                }
+                years = Object.keys(yd)
+                years.sort()
+                for (i = 0; i < years.length; i++) {
+                    var x = document.getElementById("year_select")
+                    option = document.createElement("option")
+                    option.text = years[i]
+                    x.add(option)
+                }
+            })
+        }
+
+        function getData(){
+            //Clears formatting
+            for (d in dma.byID) {
+                stylename = "#d" + d
+                var myElement = document.querySelector(stylename)
+                myElement.style.fill = "#cccccc"
+            }
+            try{
+                summaries = {}
+                syear =  multiselection("year_select").map(Number)
+                smake = selection("make_select")
+                smodel = selection("model_select")
+                sdma =  dma.byName[selection("source_dma")].ID
+
+                var filename= "cars/" + smake + ".csv"
+                d3.csv(filename, function(data){
+                    //If dma not used yet, initialize
+                    for (i=0; i<data.length; i++){
+                        if(data[i].model == smodel
+                                && syear.indexOf(Number(data[i].year)) > -1){
+                            if(!(data[i].dma_cd in summaries)){
+                                //Probably add the data table stuff here
+                                summaries[data[i].dma_cd] = {
+                                    Prices: [Number(data[i].price)],
+                                    Adj_Prices: [Number(data[i].adj_price)],
+                                    Years: [data[i].year],
+                                    Mean: 0,
+                                    Median: 0,
+                                    Margin: 0,
+                                    Adj_Median: 0,
+                                    Count: 0,
+                                    Med_Mileage: 0,
+                                    Mileages: [Number(data[i].mileage)],
+                                    Adj_Margin: 0
+                                }
+                            }
+                            else {
+                                summaries[data[i].dma_cd].Prices.push(Number(data[i].price))
+                                summaries[data[i].dma_cd].Adj_Prices.push(Number(data[i].adj_price))
+                                summaries[data[i].dma_cd].Years.push(Number(data[i].year))
+                                summaries[data[i].dma_cd].Mileages.push(Number(data[i].mileage))
+                            }
+                        }
+                    }
+
+                    try{
+                        summaries[sdma]
+                        summaries[sdma].Mean = mean(summaries[sdma].Prices)
+                        summaries[sdma].Median = median(summaries[sdma].Prices)
+                        summaries[sdma].Med_Mileage = median(summaries[sdma].Mileages)
+                        summaries[sdma].Adj_Median = median(summaries[sdma].Adj_Prices)
+                        summaries[sdma].Count = summaries[sdma].Prices.length
+                    }
+                    catch(err) {window.alert("There are no available vehicles in your selected market.")}
+
+
+                    for (d in summaries){
+                        if (d !== sdma ){
+                            //setData
+                            summaries[d].Mean = mean(summaries[d].Prices)
+                            summaries[d].Median = median(summaries[d].Prices)
+                            summaries[d].Adj_Median = median(summaries[d].Adj_Prices)
+                            summaries[d].Count = summaries[d].Prices.length
+                            summaries[d].Med_Mileage = median(summaries[d].Mileages)
+                            cost = transportcost(dma.byID[sdma].Distances[d])
+                            marg = summaries[sdma].Median - summaries[d].Median - cost
+                            adj_marg = summaries[sdma].Adj_Median - summaries[d].Adj_Median - cost
+                            summaries[d].Margin = marg
+                            summaries[d].Adj_Margin = adj_marg
+                            //setColors
+                            assignColor(d, adj_marg, summaries[d].Prices.length)
+
+                        }
+                    }
+                    summaries[sdma].Margin = 0
+                })}
+
+
+            catch(err) {window.alert("Please select all fields.")}
+
+        }
+
+        // Math is for nerds
+        function mean(x){
+            return x.reduce(function(a,b){return a+b},0) / x.length
+        }
+
+        function median(x){
+            x.sort()
+            if (x.length%2 == 1){
+                return x[Math.floor(x.length/2)]
+            }
+            else{
+                return (x[x.length/2] + x[(x.length/2)-1]) / 2
+            }
+        }
+        //Estimate for transport cost; Ops can provide something better.
+        function transportcost(dist){
+            cost = 135.67 + (0.65 * dist)
+            return cost
+        }
+
+        function assignColor(id, val, count){
+            stylename = "#d" + id
+            var myElement = document.querySelector(stylename)
+            //Case statement to assign
+            //TODO: Determine what the count filter should be
+            if (count <= 10){
+                myElement.style.fill = "#cccccc";            }
+            else if (val == 0 || id == sdma){
+                myElement.style.fill = "#009933";}
+            else if (val > 2000){
+                colname = "#313695";
+                myElement.style.fill = colname;}
+            else if (val > 1500 && val <= 2000){
+                colname = "#4575b4";
+                myElement.style.fill = colname;}
+            else if (val > 1000 && val <= 1500){
+                colname = "#74add1";
+                myElement.style.fill = colname;}
+            else if (val > 500 && val <= 1000){
+                colname = "#abd9e9";
+                myElement.style.fill = colname;}
+            else if (val > 0 && val <= 500){
+                colname = "#e0f3f8";
+                myElement.style.fill = colname;}
+            else if (val >= -500 && val < 0){
+                colname = "#fee090";
+                myElement.style.fill = colname;}
+            else if (val >= -1000 && val < -500){
+                colname = "#fdae61";
+                myElement.style.fill = colname;}
+            else if (val >= -1500 && val < -1000){
+                colname = "#f46d43";
+                myElement.style.fill = colname;}
+            else if (val >= -2000 && val < -1500){
+                colname = "#d73027";
+                myElement.style.fill = colname;}
+            else if (val < -2000){
+                colname = "#a50026";
+                myElement.style.fill = colname;}
+//        myElement.style.fill = colname
+        }
+
+        function addDetails(id) {
+            try{
+                var child = document.getElementById("tabledetails")
+                var parent = child.parentElement
+                parent.removeChild(child)
+            }
+            catch(err){console.log("No previous data to remove")}
+
+            cars = [];
+            syear = multiselection("year_select").map(Number);
+            smake = selection("make_select");
+            smodel = selection("model_select");
+            sdma = dma.byName[selection("source_dma")].ID;
+
+            var filename = "cars/" + smake + ".csv";
+            d3.csv(filename, function (data) {
+                for (i = 0; i < data.length; i++) {
+                    if (data[i].model == smodel
+                            && syear.indexOf(Number(data[i].year)) > -1
+                            && id == data[i].dma_cd) {
+                        row = {
+                            dealer_nm: data[i].dealer_nm,
+                            city_state: data[i]['City/State'],
+                            dealer_phone: data[i]['Phone Number'],
+                            vin: data[i].vin,
+                            price: Number(data[i].price),
+                            mileage: data[i].mileage,
+                            transit: Math.round(transportcost(dma['byID'][sdma]['Distances'][id])),
+                            margin: Math.round(summaries[sdma].Median -
+                                    transportcost(dma['byID'][sdma]['Distances'][id]) - data[i].price)
+                        }
+                        cars.push(row)
+                    }
+                }
+                //Populate Table
+                table.append('tbody')
+                        .attr("id", "tabledetails")
+                        .selectAll('tr')
+                        .data(cars)
+                        .enter()
+                        .append('tr')
+                        .selectAll('td')
+                        .data(function(row, i) {
+                            return columns.map(function(c) {
+                                // compute cell values for this specific row
+                                var cell = {};
+                                d3.keys(c).forEach(function(k) {
+                                    cell[k] = typeof c[k] == 'function' ? c[k](row,i) : c[k];
+                                });
+                                return cell;
+                            });
+                        }).enter()
+                        .append('td')
+                        .html(ƒ('html'))
+                        .attr('class', ƒ('cl'));
+                table.selectAll("tbody tr")
+                        .sort(function(a,b) {
+                            return d3.ascending(a.price, b.price)
+                        })
+            })
+        }
+
+
+        genMakes()
+    </script>
+</div>
